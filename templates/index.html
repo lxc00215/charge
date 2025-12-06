@@ -3,21 +3,48 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>云端记账本</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>老板记账本 终极版</title>
 
-    <link href="https://cdn.staticfile.net/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.staticfile.net/vue/3.3.4/vue.global.prod.min.js"></script>
 
-    <link href="https://cdn.staticfile.net/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="./lib/pinyin.js"></script>
 
     <style>
         [v-cloak] {
+            display: none !important;
+        }
+
+        body {
+            background-color: #111827;
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                background-color: #f3f4f6;
+                display: block;
+                height: auto;
+                overflow: auto;
+            }
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
 
-        /* 补充 v2 版本可能缺少的几个小动画样式 */
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
         @keyframes bounce-up {
             from {
                 transform: translateY(100%);
@@ -33,252 +60,524 @@
         .animate-bounce-up {
             animation: bounce-up 0.3s ease-out;
         }
+
+        @keyframes fade-in {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .animate-fade-in {
+            animation: fade-in 0.2s ease-out;
+        }
     </style>
 </head>
 
-<body class="bg-gray-100 min-h-screen pb-20">
+<body>
 
-    <div id="app" v-cloak class="max-w-md mx-auto bg-white min-h-screen shadow-lg relative">
+    <div id="app" v-cloak
+        class="w-full h-[100dvh] sm:h-[90vh] sm:min-h-[640px] sm:w-[420px] sm:rounded-3xl bg-gray-50 flex flex-col shadow-2xl overflow-hidden relative sm:border-[8px] sm:border-gray-800">
 
-        <header class="bg-indigo-600 text-white p-4 sticky top-0 z-10 shadow-md flex justify-between items-center">
-            <h1 class="text-xl font-bold"><i class="fa-solid fa-cloud mr-2"></i>云端记账本</h1>
-            <div class="flex gap-2">
-                <span v-if="saving" class="text-xs flex items-center bg-indigo-800 px-2 rounded animate-pulse">
-                    <i class="fa-solid fa-sync fa-spin mr-1"></i> 保存中...
-                </span>
-                <button @click="showAddModal = true"
-                    class="bg-yellow-400 text-indigo-900 px-3 py-1 rounded-full text-sm font-bold shadow hover:bg-yellow-300">
-                    + 记一笔
+        <header class="bg-indigo-600 text-white p-4 shrink-0 shadow-md flex justify-between items-center z-20">
+            <h1 class="text-lg font-bold flex items-center">
+                <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z">
+                    </path>
+                </svg>
+                老板记账
+            </h1>
+            <div class="flex gap-3 items-center">
+                <button @click="openStats" class="text-indigo-200 hover:text-white transition p-1">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path>
+                    </svg>
+                </button>
+                <span v-if="saving" class="text-xs bg-indigo-800 px-2 rounded animate-pulse">同步中...</span>
+                <button @click="openModal('borrow')"
+                    class="bg-yellow-400 text-indigo-900 px-3 py-1.5 rounded-full text-sm font-bold shadow hover:bg-yellow-300 flex items-center transition-transform active:scale-95">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    记账
                 </button>
             </div>
         </header>
 
-        <div class="p-2">
-            <div v-if="loading" class="text-center mt-10 text-gray-500">
-                <i class="fa-solid fa-spinner fa-spin text-3xl"></i>
-                <p class="mt-2">正在从云端拉取账本...</p>
+        <div class="flex-1 overflow-y-auto p-3 scroll-smooth bg-gray-100">
+            <div v-if="loading" class="text-center mt-20 text-gray-400 flex flex-col items-center">
+                <svg class="animate-spin h-8 w-8 text-indigo-500 mb-2" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                正在同步...
             </div>
 
-            <div v-else-if="Object.keys(data).length === 0" class="text-center text-gray-400 mt-20">
-                <i class="fa-solid fa-clipboard-list text-6xl mb-4"></i>
-                <p>还没有账单，快去记一笔吧！</p>
+            <div v-else-if="Object.keys(data).length === 0" class="text-center mt-20 text-gray-400">
+                <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01">
+                    </path>
+                </svg>
+                还没有账单，点右上角记一笔
             </div>
 
-            <div v-else v-for="(shops, location) in data" :key="location"
-                class="mb-3 border rounded-lg bg-gray-50 overflow-hidden shadow-sm">
-                <div @click="toggle(location)"
-                    class="p-4 bg-gray-200 flex justify-between items-center cursor-pointer hover:bg-gray-300">
-                    <span class="font-bold text-lg text-gray-700">{{ location }}</span>
-                    <i :class="expanded[location] ? 'fa-chevron-up' : 'fa-chevron-down'" class="text-gray-500"></i>
+            <div v-else v-for="(groupLocations, letter) in groupedData" :key="letter" class="mb-4 animate-fade-in">
+                <div
+                    class="sticky top-0 bg-gray-100/95 backdrop-blur z-10 px-2 py-1 text-xs font-bold text-gray-400 border-b border-gray-200 mb-2 flex items-center">
+                    <span
+                        class="w-5 h-5 bg-indigo-100 text-indigo-600 rounded flex items-center justify-center mr-2">{{ letter }}</span>
                 </div>
 
-                <div v-if="expanded[location]" class="bg-white">
-                    <div v-for="(records, shopName) in shops" :key="shopName" class="border-b last:border-0">
-                        <div class="p-3 bg-blue-50 text-blue-800 font-semibold flex justify-between items-center">
-                            <span><i class="fa-solid fa-store mr-1"></i> {{ shopName }}</span>
-                            <span class="text-xs bg-blue-200 px-2 py-0.5 rounded text-blue-800">未还:
-                                {{ calculateTotal(records) }}</span>
+                <div v-for="location in groupLocations" :key="location" class="mb-3 px-1">
+                    <div class="text-sm font-bold text-gray-500 ml-2 mb-1">{{ location }}</div>
+
+                    <div v-for="(shopData, shopName) in data[location]" :key="shopName"
+                        class="bg-white rounded-xl p-4 shadow-sm mb-3 border border-gray-100 relative overflow-hidden active:scale-[0.98] transition-all hover:shadow-md"
+                        @click="openDetail(location, shopName)">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-gray-800 text-lg flex items-center">
+                                    <svg class="w-4 h-4 mr-1 text-indigo-400" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4">
+                                        </path>
+                                    </svg>
+                                    {{ shopName }}
+                                </h3>
+                                <p class="text-xs text-gray-400 mt-1 ml-5">最近: {{ getLastDate(shopData) }}</p>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-2xl font-black font-mono tracking-tight"
+                                    :class="getBalance(shopData) > 0 ? 'text-red-500' : 'text-gray-300'">
+                                    {{ getBalance(shopData) }}
+                                </div>
+                                <div class="text-[10px] text-gray-400">当前欠款</div>
+                            </div>
                         </div>
-                        <ul class="divide-y divide-gray-100">
-                            <li v-for="record in records" :key="record.id"
-                                class="p-3 flex justify-between items-center hover:bg-gray-50">
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-lg font-bold"
-                                            :class="record.is_paid ? 'text-gray-400 line-through' : 'text-red-600'">
-                                            {{ record.amount }}元
-                                        </span>
-                                        <span v-if="record.is_paid"
-                                            class="text-xs text-green-600 border border-green-600 px-1 rounded">已结清</span>
-                                    </div>
-                                    <div class="text-gray-500 text-sm mt-1">
-                                        {{ record.note }} <span
-                                            class="text-xs text-gray-400 ml-2">{{ record.date }}</span>
-                                    </div>
-                                </div>
-                                <div class="flex gap-2">
-                                    <button @click="toggleStatus(location, shopName, record.id)"
-                                        class="w-8 h-8 rounded-full flex items-center justify-center border"
-                                        :class="record.is_paid ? 'text-gray-400 border-gray-300' : 'text-green-600 border-green-600 bg-green-50'">
-                                        <i class="fa-solid" :class="record.is_paid ? 'fa-rotate-left' : 'fa-check'"></i>
-                                    </button>
-                                    <button @click="deleteRecord(location, shopName, record.id)"
-                                        class="w-8 h-8 rounded-full border border-red-200 text-red-300 hover:text-red-500 hover:border-red-500 flex items-center justify-center">
-                                        <i class="fa-solid fa-trash"></i>
-                                    </button>
-                                </div>
-                            </li>
-                        </ul>
+
+                        <div class="mt-3 pt-3 border-t border-dashed border-gray-100 flex gap-2" @click.stop>
+                            <button @click="quickAction('borrow', location, shopName)"
+                                class="flex-1 bg-red-50 text-red-600 py-2 rounded-lg text-sm font-bold hover:bg-red-100 transition">
+                                + 再借点
+                            </button>
+                            <button v-if="getBalance(shopData) > 0" @click="quickAction('repay', location, shopName)"
+                                class="flex-1 bg-green-50 text-green-600 py-2 rounded-lg text-sm font-bold hover:bg-green-100 transition">
+                                - 还一笔
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div v-if="showAddModal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-4">
-            <div class="bg-white w-full max-w-sm rounded-xl p-6 shadow-2xl animate-bounce-up">
-                <h2 class="text-xl font-bold mb-4 text-gray-800">记一笔</h2>
-                <input list="locations" v-model="form.location" class="w-full border p-2 rounded mb-3 text-lg"
-                    placeholder="地点 (如: xx镇)">
-                <datalist id="locations">
-                    <option v-for="(v, k) in data" :value="k"></option>
-                </datalist>
-                <input v-model="form.shop" class="w-full border p-2 rounded mb-3 text-lg" placeholder="店铺名称">
-                <input v-model="form.amount" type="number"
-                    class="w-full border p-2 rounded mb-3 text-2xl text-red-600 font-bold" placeholder="金额">
-                <input v-model="form.note" class="w-full border p-2 rounded mb-6" placeholder="备注">
-                <div class="flex gap-3">
-                    <button @click="showAddModal = false" class="flex-1 py-3 bg-gray-200 rounded-lg">取消</button>
-                    <button @click="submitForm"
-                        class="flex-1 py-3 bg-indigo-600 text-white rounded-lg font-bold">确认</button>
+        <div v-if="showModal"
+            class="absolute inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center backdrop-blur-sm"
+            @click.self="closeModal">
+            <div
+                class="bg-white w-full sm:w-[95%] sm:rounded-2xl rounded-t-2xl shadow-2xl animate-bounce-up flex flex-col max-h-[90vh]">
+
+                <div class="p-4 border-b flex justify-between items-center"
+                    :class="mode === 'borrow' ? 'bg-red-50' : 'bg-green-50'">
+                    <h2 class="text-lg font-bold flex items-center"
+                        :class="mode === 'borrow' ? 'text-red-700' : 'text-green-700'">
+                        <span class="w-2 h-6 rounded mr-2"
+                            :class="mode === 'borrow' ? 'bg-red-500' : 'bg-green-500'"></span>
+                        {{ mode === 'borrow' ? '记一笔欠账' : '收到还款' }}
+                    </h2>
+                    <button @click="closeModal"
+                        class="text-gray-400 hover:text-gray-600 font-bold text-2xl leading-none">&times;</button>
+                </div>
+
+                <div class="p-4 overflow-y-auto">
+
+                    <div v-if="isQuickMode"
+                        class="mb-4 bg-gray-50 border border-gray-100 p-4 rounded-xl flex items-center justify-between">
+                        <div>
+                            <div class="text-xs text-gray-400 font-bold uppercase">当前目标</div>
+                            <div class="text-xl font-black text-gray-800">{{ form.location }} / {{ form.shop }}</div>
+                        </div>
+                        <div
+                            class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <div v-else>
+                        <div class="mb-5">
+                            <label class="text-xs font-bold text-gray-400 block mb-2 uppercase tracking-wide">1.
+                                选择地点</label>
+                            <div class="flex flex-wrap gap-2">
+                                <button v-for="loc in locations" :key="loc" @click="selectLocation(loc)"
+                                    class="px-3 py-2 rounded-lg text-sm border font-medium transition-all shadow-sm"
+                                    :class="form.location === loc ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'">
+                                    {{ loc }}
+                                </button>
+                                <button @click="isAddingNewLocation = !isAddingNewLocation"
+                                    class="px-3 py-2 rounded-lg text-sm border border-dashed border-gray-300 text-gray-400 hover:text-indigo-500 hover:border-indigo-400">
+                                    + 新增
+                                </button>
+                            </div>
+                            <div v-if="isAddingNewLocation" class="mt-2 flex gap-2 animate-fade-in">
+                                <input v-model="newLocationName" placeholder="输入新镇名"
+                                    class="flex-1 border-2 border-indigo-100 rounded-lg px-3 py-2 bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none">
+                                <button @click="addNewLocation"
+                                    class="bg-black text-white px-4 rounded-lg text-sm font-bold">确定</button>
+                            </div>
+                        </div>
+
+                        <div class="mb-5" v-if="form.location">
+                            <label class="text-xs font-bold text-gray-400 block mb-2 uppercase tracking-wide">2.
+                                选择店铺</label>
+                            <div class="flex flex-wrap gap-2">
+                                <button v-for="s in availableShops" :key="s" @click="form.shop = s"
+                                    class="px-3 py-2 rounded-lg text-sm border font-medium transition-all shadow-sm"
+                                    :class="form.shop === s ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'">
+                                    {{ s }}
+                                </button>
+                                <input v-model="form.shop" placeholder="或是新店名..."
+                                    class="px-3 py-2 rounded-lg text-sm border border-gray-200 bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none w-32">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <label
+                            class="text-xs font-bold text-gray-400 block mb-2 uppercase tracking-wide">{{ isQuickMode ? '输入金额' : '3. 输入金额' }}</label>
+                        <div class="relative group">
+                            <span
+                                class="absolute left-4 top-4 text-gray-400 font-bold text-xl group-focus-within:text-gray-600">¥</span>
+                            <input type="number" v-model="form.amount" ref="amountInput"
+                                class="w-full bg-gray-50 border-2 rounded-xl py-4 pl-10 pr-4 text-4xl font-black outline-none transition-colors"
+                                :class="mode === 'borrow' ? 'text-red-600 border-red-100 focus:border-red-500 focus:bg-white' : 'text-green-600 border-green-100 focus:border-green-500 focus:bg-white'"
+                                placeholder="0">
+                        </div>
+                        <input v-model="form.note"
+                            class="w-full mt-3 border-0 bg-gray-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-100 transition"
+                            placeholder="备注 (可选，如: 啤酒一箱)">
+                    </div>
+
+                    <button @click="submit"
+                        class="w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg transition-transform active:scale-[0.98]"
+                        :class="mode === 'borrow' ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-green-600 hover:bg-green-700 shadow-green-200'">
+                        确认{{ mode === 'borrow' ? '记账' : '还款' }}
+                    </button>
                 </div>
             </div>
         </div>
+
+        <div v-if="showStatsModal" class="absolute inset-0 bg-white z-50 flex flex-col animate-bounce-up">
+            <div class="p-4 border-b flex justify-between items-center bg-gray-50">
+                <h2 class="text-lg font-bold text-gray-800 flex items-center">
+                    <span class="bg-indigo-500 w-2 h-6 rounded mr-2"></span>年度总结
+                </h2>
+                <button @click="showStatsModal = false"
+                    class="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full text-gray-600 flex items-center justify-center transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-4 bg-white shadow-sm z-10">
+                <div class="flex gap-2 mb-4">
+                    <select v-model="statsYear"
+                        class="bg-gray-100 border-0 rounded-lg p-2 flex-1 font-bold text-gray-700 focus:ring-2 focus:ring-indigo-500">
+                        <option value="all">📅 所有年份</option>
+                        <option v-for="y in availableYears" :value="y">{{ y }}年</option>
+                    </select>
+                    <input v-model="statsKeyword"
+                        class="bg-gray-100 border-0 rounded-lg p-2 flex-1 focus:ring-2 focus:ring-indigo-500"
+                        placeholder="🔍 搜备注/店铺">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div
+                        class="bg-red-50 p-4 rounded-2xl border border-red-100 flex flex-col justify-center items-center">
+                        <span class="text-[10px] text-red-400 font-bold uppercase tracking-wider">当年总赊账</span>
+                        <span class="text-2xl font-black text-red-600">{{ statsSummary.borrowed }}</span>
+                    </div>
+                    <div
+                        class="bg-green-50 p-4 rounded-2xl border border-green-100 flex flex-col justify-center items-center">
+                        <span class="text-[10px] text-green-500 font-bold uppercase tracking-wider">当年已收回</span>
+                        <span class="text-2xl font-black text-green-600">{{ statsSummary.repaid }}</span>
+                    </div>
+                    <div class="col-span-2 bg-gray-800 text-white p-3 rounded-xl text-center shadow-lg">
+                        <div class="text-xs text-gray-400">目前总欠款 (历史累计)</div>
+                        <div class="text-3xl font-black text-white mt-1">¥ {{ totalUnpaid }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 bg-gray-50">
+                <div v-if="filteredRecords.length === 0" class="text-center text-gray-400 mt-10">
+                    <p>在此条件下无记录</p>
+                </div>
+                <div v-for="item in filteredRecords" :key="item.record.id"
+                    class="bg-white p-3 rounded-xl mb-2 shadow-sm border border-gray-100 flex justify-between items-center">
+                    <div>
+                        <div class="font-bold text-gray-700 text-sm">{{ item.location }} <span
+                                class="text-gray-300 mx-1">/</span> {{ item.shop }}</div>
+                        <div class="text-gray-500 text-xs mt-1">
+                            <span v-if="item.record.type === 'repay'" class="text-green-600 font-bold">[还款]</span>
+                            <span v-else class="text-red-500 font-bold">[赊账]</span>
+                            {{ item.record.note || '无备注' }}
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-mono font-bold text-lg"
+                            :class="item.record.type === 'repay' ? 'text-green-600' : 'text-red-600'">
+                            {{ item.record.type === 'repay' ? '-' : '+' }}{{ item.record.amount }}
+                        </div>
+                        <div class="text-[10px] text-gray-400">{{ item.record.date.split(' ')[0] }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="detailModal.show" class="absolute inset-0 bg-white z-40 flex flex-col animate-bounce-up">
+            <div class="p-4 bg-white border-b flex justify-between items-center shrink-0 shadow-sm z-10">
+                <button @click="detailModal.show = false"
+                    class="text-gray-500 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"><svg
+                        class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7">
+                        </path>
+                    </svg></button>
+                <h2 class="font-bold text-gray-800 text-lg">{{ detailModal.shop }}</h2>
+                <div class="w-8"></div>
+            </div>
+            <div class="p-8 text-center bg-gray-50 border-b">
+                <div class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-2">当前欠款</div>
+                <div class="text-5xl font-black text-gray-800 mb-6 font-mono tracking-tighter"
+                    :class="getBalance(data[detailModal.location][detailModal.shop]) > 0 ? 'text-red-600' : 'text-gray-400'">
+                    {{ getBalance(data[detailModal.location][detailModal.shop]) }}
+                </div>
+                <div class="flex gap-4">
+                    <button @click="quickAction('borrow', detailModal.location, detailModal.shop)"
+                        class="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-red-200 active:scale-95 transition">+
+                        再借</button>
+                    <button @click="quickAction('repay', detailModal.location, detailModal.shop)"
+                        class="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-green-200 active:scale-95 transition">-
+                        还钱</button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 bg-gray-100">
+                <div class="text-xs font-bold text-gray-400 mb-3 pl-1 uppercase">历史流水</div>
+                <div v-for="item in data[detailModal.location][detailModal.shop]" :key="item.id"
+                    class="bg-white p-4 rounded-xl border border-gray-100 mb-2 flex justify-between items-center shadow-sm">
+                    <div>
+                        <div class="font-bold text-gray-700 text-sm mb-1">
+                            {{ item.note || (item.type === 'repay' ? '还款' : '赊账') }}</div>
+                        <div class="text-xs text-gray-400">{{ item.date }}</div>
+                    </div>
+                    <div class="font-mono font-bold text-xl"
+                        :class="item.type === 'repay' ? 'text-green-500' : 'text-red-500'">
+                        {{ item.type === 'repay' ? '-' : '+' }}{{ item.amount }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
-        const { createApp, ref, onMounted } = Vue
+        const { createApp, ref, computed, onMounted, nextTick } = Vue
+        const { pinyin } = pinyinPro;
 
         // ================= 配置区域 =================
-        // 1. 去 https://getpantry.cloud/ 注册获取你的 ID
-        // 2. 把它填在下面👇
-        const PANTRY_ID = '65747c0e-331d-4896-88a8-6c3e2beb6434';
-        const BASKET_NAME = 'my_charge'; // 数据篮子名称，随便起
-        const API_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket/${BASKET_NAME}`;
+        const PANTRY_ID = '65747c0e-331d-4896-88a8-6c3e2beb6434'; // 请填入ID
         // ===========================================
+
+        const API_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket/my_ledger_v3`;
 
         createApp({
             setup() {
                 const data = ref({})
-                const expanded = ref({})
-                const showAddModal = ref(false)
                 const loading = ref(true)
                 const saving = ref(false)
+
+                const showModal = ref(false)
+                const showStatsModal = ref(false)
+                const mode = ref('borrow')
+                // 新增：区分是否为快捷模式
+                const isQuickMode = ref(false)
+
                 const form = ref({ location: '', shop: '', amount: '', note: '' })
 
-                // 工具：生成简单的 UUID
-                const uuidv4 = () => {
-                    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-                        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-                        return v.toString(16);
-                    });
-                }
+                const isAddingNewLocation = ref(false)
+                const newLocationName = ref('')
+                const amountInput = ref(null)
 
-                // 工具：生成当前时间字符串
+                const detailModal = ref({ show: false, location: '', shop: '' })
+                const statsYear = ref(new Date().getFullYear().toString())
+                const statsKeyword = ref('')
+
+                const uuidv4 = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => (c === 'x' ? Math.random() * 16 | 0 : (Math.random() * 16 | 0) & 0x3 | 0x8).toString(16));
                 const getCurrentTime = () => {
                     const now = new Date();
                     return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
                 }
 
-                // 核心：加载数据
-                const loadData = async () => {
-                    loading.value = true;
-                    try {
-                        const res = await fetch(API_URL);
-                        if (res.ok) {
-                            data.value = await res.json();
-                        } else {
-                            // 第一次可能没有数据，初始化为空
-                            data.value = {};
+                const locations = computed(() => Object.keys(data.value).sort((a, b) => a.localeCompare(b, 'zh-CN')))
+                const availableShops = computed(() => {
+                    if (!form.value.location || !data.value[form.value.location]) return [];
+                    return Object.keys(data.value[form.value.location]);
+                })
+                const groupedData = computed(() => {
+                    const groups = {};
+                    locations.value.forEach(loc => {
+                        let letter = pinyin(loc, { pattern: 'first', toneType: 'none', type: 'array' })[0].toUpperCase();
+                        if (!/^[A-Z]$/.test(letter)) letter = '#';
+                        if (!groups[letter]) groups[letter] = [];
+                        groups[letter].push(loc);
+                    });
+                    return Object.keys(groups).sort().reduce((acc, key) => { acc[key] = groups[key]; return acc; }, {});
+                })
+
+                const availableYears = computed(() => {
+                    const years = new Set();
+                    for (const loc in data.value) {
+                        for (const shop in data.value[loc]) {
+                            data.value[loc][shop].forEach(r => {
+                                if (r.date) years.add(r.date.substring(0, 4));
+                            });
                         }
-                    } catch (e) {
-                        console.error("加载失败", e);
-                        data.value = {};
-                    } finally {
-                        loading.value = false;
                     }
+                    return Array.from(years).sort().reverse();
+                })
+
+                const filteredRecords = computed(() => {
+                    let result = [];
+                    for (const loc in data.value) {
+                        for (const shop in data.value[loc]) {
+                            data.value[loc][shop].forEach(r => {
+                                const yearMatch = statsYear.value === 'all' || (r.date && r.date.startsWith(statsYear.value));
+                                const keyword = statsKeyword.value.toLowerCase();
+                                const textMatch = !keyword || loc.toLowerCase().includes(keyword) || shop.toLowerCase().includes(keyword) || (r.note && r.note.toLowerCase().includes(keyword));
+                                if (yearMatch && textMatch) result.push({ location: loc, shop: shop, record: r });
+                            });
+                        }
+                    }
+                    return result.sort((a, b) => new Date(b.record.date) - new Date(a.record.date));
+                })
+
+                const statsSummary = computed(() => {
+                    let borrowed = 0, repaid = 0;
+                    filteredRecords.value.forEach(item => {
+                        const amt = Number(item.record.amount);
+                        if (item.record.type === 'repay') repaid += amt;
+                        else borrowed += amt;
+                    });
+                    return { borrowed, repaid };
+                })
+
+                const totalUnpaid = computed(() => {
+                    let total = 0;
+                    for (const loc in data.value) {
+                        for (const shop in data.value[loc]) {
+                            total += getBalance(data.value[loc][shop]);
+                        }
+                    }
+                    return total;
+                })
+
+                const getBalance = (records) => {
+                    if (!Array.isArray(records)) return 0;
+                    return records.reduce((sum, r) => {
+                        if (r.type === 'repay') return sum - Number(r.amount);
+                        return sum + Number(r.amount);
+                    }, 0);
                 }
 
-                // 核心：保存数据到云端
-                const saveDataToCloud = async (newData) => {
-                    saving.value = true;
-                    try {
-                        await fetch(API_URL, {
-                            method: 'POST', // Pantry 用 POST 来更新/合并数据
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(newData)
-                        });
-                    } catch (e) {
-                        alert("保存失败，请检查网络！");
-                    } finally {
-                        saving.value = false;
-                    }
+                const getLastDate = (records) => {
+                    if (!records || records.length === 0) return '无';
+                    return records[0].date.split(' ')[0].slice(5);
                 }
 
-                const toggle = (loc) => expanded.value[loc] = !expanded.value[loc]
-                const calculateTotal = (records) => records.filter(r => !r.is_paid).reduce((sum, r) => sum + Number(r.amount), 0)
+                // 全局打开：重置，非快捷模式
+                const openModal = (actionType) => {
+                    mode.value = actionType;
+                    isQuickMode.value = false; // 关键
+                    form.value = { location: '', shop: '', amount: '', note: '' };
+                    isAddingNewLocation.value = false;
+                    showModal.value = true;
+                }
 
-                // 提交新账单 (逻辑从 Python 移到了这里)
-                const submitForm = async () => {
-                    if (!form.value.location || !form.value.shop || !form.value.amount) return alert("请把信息填完整！");
+                // 快捷打开：设定上下文，开启快捷模式
+                const quickAction = (actionType, loc, shop) => {
+                    mode.value = actionType;
+                    isQuickMode.value = true; // 关键
+                    form.value = { location: loc, shop: shop, amount: '', note: '' };
+                    showModal.value = true;
+                    nextTick(() => { if (amountInput.value) amountInput.value.focus(); });
+                }
 
+                const openStats = () => {
+                    showStatsModal.value = true;
+                    statsYear.value = new Date().getFullYear().toString();
+                }
+
+                const closeModal = () => showModal.value = false;
+                const selectLocation = (loc) => { form.value.location = loc; form.value.shop = ''; }
+                const addNewLocation = () => { if (!newLocationName.value) return; form.value.location = newLocationName.value; newLocationName.value = ''; isAddingNewLocation.value = false; }
+
+                const submit = async () => {
+                    if (!form.value.location || !form.value.shop || !form.value.amount) return alert("请填写完整");
                     const loc = form.value.location;
                     const shop = form.value.shop;
-
-                    // 只有修改 data.value 才能更新视图
                     if (!data.value[loc]) data.value[loc] = {};
                     if (!data.value[loc][shop]) data.value[loc][shop] = [];
 
-                    const newRecord = {
+                    data.value[loc][shop].unshift({
                         id: uuidv4(),
+                        type: mode.value,
                         amount: form.value.amount,
                         note: form.value.note,
-                        date: getCurrentTime(),
-                        is_paid: false
-                    };
+                        date: getCurrentTime()
+                    });
 
-                    data.value[loc][shop].unshift(newRecord);
-
-                    // 保存
-                    await saveDataToCloud(data.value);
-
-                    expanded.value[loc] = true;
-                    form.value = { location: '', shop: '', amount: '', note: '' };
-                    showAddModal.value = false;
+                    await saveData();
+                    closeModal();
                 }
 
-                // 切换状态
-                const toggleStatus = async (loc, shop, id) => {
-                    const record = data.value[loc][shop].find(r => r.id === id);
-                    if (record) {
-                        record.is_paid = !record.is_paid;
-                        await saveDataToCloud(data.value);
-                    }
+                const openDetail = (loc, shop) => { detailModal.value = { show: true, location: loc, shop: shop }; }
+
+                const loadData = async () => {
+                    loading.value = true;
+                    try {
+                        const res = await fetch(API_URL + '?_t=' + new Date().getTime());
+                        if (res.ok) data.value = await res.json();
+                    } catch (e) { console.error(e); }
+                    finally { loading.value = false; }
                 }
 
-                // 删除
-                const deleteRecord = async (loc, shop, id) => {
-                    if (!confirm("确定删除吗？")) return;
-                    data.value[loc][shop] = data.value[loc][shop].filter(r => r.id !== id);
-                    if (data.value[loc][shop].length === 0) delete data.value[loc][shop];
-                    if (Object.keys(data.value[loc]).length === 0) delete data.value[loc];
-
-                    await saveDataToCloud(data.value);
+                const saveData = async () => {
+                    saving.value = true;
+                    try {
+                        await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data.value) });
+                    } catch (e) { alert("保存失败"); }
+                    finally { saving.value = false; }
                 }
 
                 onMounted(loadData)
 
-                return { data, expanded, showAddModal, form, loading, saving, toggle, submitForm, toggleStatus, deleteRecord, calculateTotal }
+                return {
+                    data, loading, saving, showModal, showStatsModal, mode, form, isQuickMode, isAddingNewLocation, newLocationName, amountInput, detailModal,
+                    locations, availableShops, groupedData, statsYear, statsKeyword, availableYears, filteredRecords, statsSummary, totalUnpaid,
+                    openModal, closeModal, selectLocation, addNewLocation, submit, quickAction, openDetail, getBalance, getLastDate, openStats
+                }
             }
         }).mount('#app')
     </script>
-    <style>
-        @keyframes bounce-up {
-            from {
-                transform: translateY(100%);
-                opacity: 0;
-            }
-
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-
-        .animate-bounce-up {
-            animation: bounce-up 0.3s ease-out;
-        }
-    </style>
 </body>
 
 </html>
