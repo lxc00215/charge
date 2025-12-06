@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>云端记账本</title>
+    <script src="https://cdn.staticfile.net/tailwindcss/3.3.3/tailwind.min.js"></script>
+    <script src="https://cdn.staticfile.net/vue/3.3.4/vue.global.prod.min.js"></script>
+    <link href="https://cdn.staticfile.net/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        [v-cloak] {
+            display: none;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen pb-20">
+
+    <div id="app" v-cloak class="max-w-md mx-auto bg-white min-h-screen shadow-lg relative">
+
+        <header class="bg-indigo-600 text-white p-4 sticky top-0 z-10 shadow-md flex justify-between items-center">
+            <h1 class="text-xl font-bold"><i class="fa-solid fa-cloud mr-2"></i>云端记账本</h1>
+            <div class="flex gap-2">
+                <span v-if="saving" class="text-xs flex items-center bg-indigo-800 px-2 rounded animate-pulse">
+                    <i class="fa-solid fa-sync fa-spin mr-1"></i> 保存中...
+                </span>
+                <button @click="showAddModal = true"
+                    class="bg-yellow-400 text-indigo-900 px-3 py-1 rounded-full text-sm font-bold shadow hover:bg-yellow-300">
+                    + 记一笔
+                </button>
+            </div>
+        </header>
+
+        <div class="p-2">
+            <div v-if="loading" class="text-center mt-10 text-gray-500">
+                <i class="fa-solid fa-spinner fa-spin text-3xl"></i>
+                <p class="mt-2">正在从云端拉取账本...</p>
+            </div>
+
+            <div v-else-if="Object.keys(data).length === 0" class="text-center text-gray-400 mt-20">
+                <i class="fa-solid fa-clipboard-list text-6xl mb-4"></i>
+                <p>还没有账单，快去记一笔吧！</p>
+            </div>
+
+            <div v-else v-for="(shops, location) in data" :key="location"
+                class="mb-3 border rounded-lg bg-gray-50 overflow-hidden shadow-sm">
+                <div @click="toggle(location)"
+                    class="p-4 bg-gray-200 flex justify-between items-center cursor-pointer hover:bg-gray-300">
+                    <span class="font-bold text-lg text-gray-700">{{ location }}</span>
+                    <i :class="expanded[location] ? 'fa-chevron-up' : 'fa-chevron-down'" class="text-gray-500"></i>
+                </div>
+
+                <div v-if="expanded[location]" class="bg-white">
+                    <div v-for="(records, shopName) in shops" :key="shopName" class="border-b last:border-0">
+                        <div class="p-3 bg-blue-50 text-blue-800 font-semibold flex justify-between items-center">
+                            <span><i class="fa-solid fa-store mr-1"></i> {{ shopName }}</span>
+                            <span class="text-xs bg-blue-200 px-2 py-0.5 rounded text-blue-800">未还:
+                                {{ calculateTotal(records) }}</span>
+                        </div>
+                        <ul class="divide-y divide-gray-100">
+                            <li v-for="record in records" :key="record.id"
+                                class="p-3 flex justify-between items-center hover:bg-gray-50">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-lg font-bold"
+                                            :class="record.is_paid ? 'text-gray-400 line-through' : 'text-red-600'">
+                                            {{ record.amount }}元
+                                        </span>
+                                        <span v-if="record.is_paid"
+                                            class="text-xs text-green-600 border border-green-600 px-1 rounded">已结清</span>
+                                    </div>
+                                    <div class="text-gray-500 text-sm mt-1">
+                                        {{ record.note }} <span
+                                            class="text-xs text-gray-400 ml-2">{{ record.date }}</span>
+                                    </div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button @click="toggleStatus(location, shopName, record.id)"
+                                        class="w-8 h-8 rounded-full flex items-center justify-center border"
+                                        :class="record.is_paid ? 'text-gray-400 border-gray-300' : 'text-green-600 border-green-600 bg-green-50'">
+                                        <i class="fa-solid" :class="record.is_paid ? 'fa-rotate-left' : 'fa-check'"></i>
+                                    </button>
+                                    <button @click="deleteRecord(location, shopName, record.id)"
+                                        class="w-8 h-8 rounded-full border border-red-200 text-red-300 hover:text-red-500 hover:border-red-500 flex items-center justify-center">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showAddModal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-4">
+            <div class="bg-white w-full max-w-sm rounded-xl p-6 shadow-2xl animate-bounce-up">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">记一笔</h2>
+                <input list="locations" v-model="form.location" class="w-full border p-2 rounded mb-3 text-lg"
+                    placeholder="地点 (如: xx镇)">
+                <datalist id="locations">
+                    <option v-for="(v, k) in data" :value="k"></option>
+                </datalist>
+                <input v-model="form.shop" class="w-full border p-2 rounded mb-3 text-lg" placeholder="店铺名称">
+                <input v-model="form.amount" type="number"
+                    class="w-full border p-2 rounded mb-3 text-2xl text-red-600 font-bold" placeholder="金额">
+                <input v-model="form.note" class="w-full border p-2 rounded mb-6" placeholder="备注">
+                <div class="flex gap-3">
+                    <button @click="showAddModal = false" class="flex-1 py-3 bg-gray-200 rounded-lg">取消</button>
+                    <button @click="submitForm"
+                        class="flex-1 py-3 bg-indigo-600 text-white rounded-lg font-bold">确认</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue
+
+        // ================= 配置区域 =================
+        // 1. 去 https://getpantry.cloud/ 注册获取你的 ID
+        // 2. 把它填在下面👇
+        const PANTRY_ID = '65747c0e-331d-4896-88a8-6c3e2beb6434';
+        const BASKET_NAME = 'my_charge'; // 数据篮子名称，随便起
+        const API_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket/${BASKET_NAME}`;
+        // ===========================================
+
+        createApp({
+            setup() {
+                const data = ref({})
+                const expanded = ref({})
+                const showAddModal = ref(false)
+                const loading = ref(true)
+                const saving = ref(false)
+                const form = ref({ location: '', shop: '', amount: '', note: '' })
+
+                // 工具：生成简单的 UUID
+                const uuidv4 = () => {
+                    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                        return v.toString(16);
+                    });
+                }
+
+                // 工具：生成当前时间字符串
+                const getCurrentTime = () => {
+                    const now = new Date();
+                    return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                }
+
+                // 核心：加载数据
+                const loadData = async () => {
+                    loading.value = true;
+                    try {
+                        const res = await fetch(API_URL);
+                        if (res.ok) {
+                            data.value = await res.json();
+                        } else {
+                            // 第一次可能没有数据，初始化为空
+                            data.value = {};
+                        }
+                    } catch (e) {
+                        console.error("加载失败", e);
+                        data.value = {};
+                    } finally {
+                        loading.value = false;
+                    }
+                }
+
+                // 核心：保存数据到云端
+                const saveDataToCloud = async (newData) => {
+                    saving.value = true;
+                    try {
+                        await fetch(API_URL, {
+                            method: 'POST', // Pantry 用 POST 来更新/合并数据
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(newData)
+                        });
+                    } catch (e) {
+                        alert("保存失败，请检查网络！");
+                    } finally {
+                        saving.value = false;
+                    }
+                }
+
+                const toggle = (loc) => expanded.value[loc] = !expanded.value[loc]
+                const calculateTotal = (records) => records.filter(r => !r.is_paid).reduce((sum, r) => sum + Number(r.amount), 0)
+
+                // 提交新账单 (逻辑从 Python 移到了这里)
+                const submitForm = async () => {
+                    if (!form.value.location || !form.value.shop || !form.value.amount) return alert("请把信息填完整！");
+
+                    const loc = form.value.location;
+                    const shop = form.value.shop;
+
+                    // 只有修改 data.value 才能更新视图
+                    if (!data.value[loc]) data.value[loc] = {};
+                    if (!data.value[loc][shop]) data.value[loc][shop] = [];
+
+                    const newRecord = {
+                        id: uuidv4(),
+                        amount: form.value.amount,
+                        note: form.value.note,
+                        date: getCurrentTime(),
+                        is_paid: false
+                    };
+
+                    data.value[loc][shop].unshift(newRecord);
+
+                    // 保存
+                    await saveDataToCloud(data.value);
+
+                    expanded.value[loc] = true;
+                    form.value = { location: '', shop: '', amount: '', note: '' };
+                    showAddModal.value = false;
+                }
+
+                // 切换状态
+                const toggleStatus = async (loc, shop, id) => {
+                    const record = data.value[loc][shop].find(r => r.id === id);
+                    if (record) {
+                        record.is_paid = !record.is_paid;
+                        await saveDataToCloud(data.value);
+                    }
+                }
+
+                // 删除
+                const deleteRecord = async (loc, shop, id) => {
+                    if (!confirm("确定删除吗？")) return;
+                    data.value[loc][shop] = data.value[loc][shop].filter(r => r.id !== id);
+                    if (data.value[loc][shop].length === 0) delete data.value[loc][shop];
+                    if (Object.keys(data.value[loc]).length === 0) delete data.value[loc];
+
+                    await saveDataToCloud(data.value);
+                }
+
+                onMounted(loadData)
+
+                return { data, expanded, showAddModal, form, loading, saving, toggle, submitForm, toggleStatus, deleteRecord, calculateTotal }
+            }
+        }).mount('#app')
+    </script>
+    <style>
+        @keyframes bounce-up {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .animate-bounce-up {
+            animation: bounce-up 0.3s ease-out;
+        }
+    </style>
+</body>
+
+</html>
