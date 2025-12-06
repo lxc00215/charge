@@ -4,8 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>老板记账本 终极版</title>
-
+    <title>老板记账本 智能版</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.staticfile.net/vue/3.3.4/vue.global.prod.min.js"></script>
@@ -253,8 +252,20 @@
                     </div>
 
                     <div class="mb-6">
-                        <label
-                            class="text-xs font-bold text-gray-400 block mb-2 uppercase tracking-wide">{{ isQuickMode ? '输入金额' : '3. 输入金额' }}</label>
+                        <div class="flex justify-between items-end mb-2">
+                            <label
+                                class="text-xs font-bold text-gray-400 uppercase tracking-wide">{{ isQuickMode ? '输入金额' : '3. 输入金额' }}</label>
+
+                            <div v-if="mode === 'repay' && currentTargetBalance > 0"
+                                class="flex items-center gap-2 animate-fade-in">
+                                <span class="text-xs text-gray-400">欠: {{ currentTargetBalance }}</span>
+                                <button @click="form.amount = currentTargetBalance"
+                                    class="bg-green-100 text-green-700 text-xs px-2 py-1 rounded font-bold hover:bg-green-200 transition">
+                                    全部结清
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="relative group">
                             <span
                                 class="absolute left-4 top-4 text-gray-400 font-bold text-xl group-focus-within:text-gray-600">¥</span>
@@ -394,7 +405,7 @@
         const { pinyin } = pinyinPro;
 
         // ================= 配置区域 =================
-        const PANTRY_ID = '65747c0e-331d-4896-88a8-6c3e2beb6434'; // 请填入ID
+        const PANTRY_ID = '9fbec891-5b09-401f-b434-baef8dfe7d5a'; // 请填入ID
         // ===========================================
 
         const API_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket/my_ledger_v3`;
@@ -408,7 +419,6 @@
                 const showModal = ref(false)
                 const showStatsModal = ref(false)
                 const mode = ref('borrow')
-                // 新增：区分是否为快捷模式
                 const isQuickMode = ref(false)
 
                 const form = ref({ location: '', shop: '', amount: '', note: '' })
@@ -480,6 +490,14 @@
                     return { borrowed, repaid };
                 })
 
+                const getBalance = (records) => {
+                    if (!Array.isArray(records)) return 0;
+                    return records.reduce((sum, r) => {
+                        if (r.type === 'repay') return sum - Number(r.amount);
+                        return sum + Number(r.amount);
+                    }, 0);
+                }
+
                 const totalUnpaid = computed(() => {
                     let total = 0;
                     for (const loc in data.value) {
@@ -490,32 +508,29 @@
                     return total;
                 })
 
-                const getBalance = (records) => {
-                    if (!Array.isArray(records)) return 0;
-                    return records.reduce((sum, r) => {
-                        if (r.type === 'repay') return sum - Number(r.amount);
-                        return sum + Number(r.amount);
-                    }, 0);
-                }
+                // 新增：计算当前弹窗中选中店铺的欠款
+                const currentTargetBalance = computed(() => {
+                    if (!form.value.location || !form.value.shop) return 0;
+                    const records = data.value[form.value.location]?.[form.value.shop];
+                    return getBalance(records);
+                });
 
                 const getLastDate = (records) => {
                     if (!records || records.length === 0) return '无';
                     return records[0].date.split(' ')[0].slice(5);
                 }
 
-                // 全局打开：重置，非快捷模式
                 const openModal = (actionType) => {
                     mode.value = actionType;
-                    isQuickMode.value = false; // 关键
+                    isQuickMode.value = false;
                     form.value = { location: '', shop: '', amount: '', note: '' };
                     isAddingNewLocation.value = false;
                     showModal.value = true;
                 }
 
-                // 快捷打开：设定上下文，开启快捷模式
                 const quickAction = (actionType, loc, shop) => {
                     mode.value = actionType;
-                    isQuickMode.value = true; // 关键
+                    isQuickMode.value = true;
                     form.value = { location: loc, shop: shop, amount: '', note: '' };
                     showModal.value = true;
                     nextTick(() => { if (amountInput.value) amountInput.value.focus(); });
@@ -572,7 +587,7 @@
 
                 return {
                     data, loading, saving, showModal, showStatsModal, mode, form, isQuickMode, isAddingNewLocation, newLocationName, amountInput, detailModal,
-                    locations, availableShops, groupedData, statsYear, statsKeyword, availableYears, filteredRecords, statsSummary, totalUnpaid,
+                    locations, availableShops, groupedData, statsYear, statsKeyword, availableYears, filteredRecords, statsSummary, totalUnpaid, currentTargetBalance,
                     openModal, closeModal, selectLocation, addNewLocation, submit, quickAction, openDetail, getBalance, getLastDate, openStats
                 }
             }
